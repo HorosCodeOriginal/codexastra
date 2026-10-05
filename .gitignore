@@ -1,0 +1,26 @@
+# --- Secrets / lokale Konfiguration ---
+# Die echte config.json (mit Token) wird NICHT committet.
+# Nutze config.example.json als Vorlage und kopiere sie zu config.json.
+config.json
+
+# --- Laufzeitdaten (Chatverlauf, Logs, Diagnose) ---
+/data/
+bridge.log
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- WorkBuddy (privat) ---
+.workbuddy-ai/
+
+# --- OS / Editor ---
+Thumbs.db
+.DS_Store
+*.lnk
+
+# --- Diagnose-Dumps ---
+*.dump
+dump/

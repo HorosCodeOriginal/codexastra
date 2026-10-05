@@ -1,0 +1,31 @@
+{
+  "ui": {
+    "mode": "simple",
+    "window_geometry": "1320x820",
+    "theme": "dark",
+    "font_size": 11
+  },
+  "token": "DEIN_TOKEN_HIER",
+  "gateway_url": "http://127.0.0.1:20128/v1",
+  "provider_id": "flagshiprouter",
+  "default_model": "gpt-6-astra",
+  "sandbox": "workspace-write",
+  "skip_git_repo_check": true,
+  "auto_start_bridge": true,
+  "bridge_host": "127.0.0.1",
+  "bridge_port": 20127,
+  "max_project_files": 4000,
+  "ignore_dirs": [
+    ".git",
+    "node_modules",
+    "__pycache__",
+    ".venv",
+    "dist",
+    "build",
+    ".workbuddy-ai",
+    "target",
+    "out",
+    "bin",
+    "obj"
+  ]
+}
