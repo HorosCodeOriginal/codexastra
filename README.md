@@ -22,10 +22,11 @@ Chat-Verlauf, Modell-Auswahl, Projekt-Browser und Live-Ausgabe.
 
 ## Schnellstart
 
-1. **Doppelklick auf `run.ps1`.**
-   Beim ersten Start wird bei Bedarf eine tkinter-fähige `.venv` angelegt und
-   nebenbei die Verknüpfung `CodexAstra.lnk` erstellt – diese startet die App
-   ganz ohne Terminal.
+1. **Doppelklick auf `starter.bat`** (einfachster Weg) **oder `run.ps1`.**
+   `starter.bat` startet die App direkt über `pythonw.exe` – ohne Terminal.
+   Fehlt die tkinter-fähige `.venv`, ruft es einmalig `run.ps1` auf, das sie
+   anlegt und dabei die Verknüpfung `CodexAstra.lnk` erstellt – diese startet
+   die App ebenfalls ganz ohne Terminal.
 2. **Projekt öffnen:** Links auf *📁 Projekt öffnen…* und einen Ordner wählen.
    Dort arbeitet Codex (Dateien anlegen, Code ausführen).
 3. **Modell wählen** (oben), dann unten eine Frage eingeben und **Senden**
@@ -43,7 +44,8 @@ Chat-Verlauf, Modell-Auswahl, Projekt-Browser und Live-Ausgabe.
 
 ```
 app.py                 Oberfläche (Einstiegspunkt)
-run.ps1                Doppelklick-Starter (pythonw, kein Terminal)
+starter.bat            Doppelklick-Starter (Batch, kein Terminal)
+run.ps1                Doppelklick-Starter (pythonw, kein Terminal; legt .venv an)
 config.json            Einstellungen (Token, Gateway, Modell, …)
 bridge.py              Responses-API-Übersetzer (Codex ↔ Gateway)
 core/                  Fachlogik (config, models, store, service, …)
@@ -73,7 +75,7 @@ data/                  conversations.json, events.jsonl, bridge.log
 | --- | --- |
 | Gateway-Anzeige rot | Gateway (Port 20128) läuft nicht. Im *experten*-Modus *Bridge neu starten* oder das Dashboard starten. |
 | „codex ist nicht verfügbar“ | `codex.exe` nicht im PATH. Pfad ggf. in `core/config.py` (`_resolve_codex`) anpassen. |
-| Kein Terminal beim Start | `run.ps1` nutzt `pythonw`; für den saubersten Start die `CodexAstra.lnk` verwenden. |
+| Kein Terminal beim Start | `starter.bat` oder `run.ps1` nutzen (beide `pythonw`); am saubersten die `CodexAstra.lnk` verwenden. |
 | App zeigt nichts / hängt | `data/events.jsonl` prüfen; `tools/smoke_app.py` ausführen, um die UI klickfrei zu testen. |
 
 ## Diagnose-Skripte (optional)
