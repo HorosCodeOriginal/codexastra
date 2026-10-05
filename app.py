@@ -57,9 +57,14 @@ class App:
         self.active: models.Conversation | None = None
         self.project_tree_data: dict = {}
         self.models: list[str] = []
+        self.model_entries: list[dict] = []   # Eintraege der aktuellen Modell-Quelle
+        self._entries_raw: list[dict] = []    # ungefilterte Eintraege dazu
+        self.usable_models: set[str] = set()  # /v1/models = tatsaechlich nutzbar
         self._streaming = False
         self._gw_fail = 0
         self._poll_count = 0
+        self._cat_tick = 0
+        self._cat_src = ""
 
         self._apply_theme()
         self._build()
@@ -131,6 +136,18 @@ class App:
                                         state="readonly", font=FONT)
         self.model_combo.pack(side="left", padx=(0, 10))
         self.model_combo.bind("<<ComboboxSelected>>", self._on_model_change)
+
+        # Modell-Quelle umschalten: nutzbar -> alle (frei) -> alle (komplett)
+        self.src_btn = tk.Button(tb, text="", command=self._cycle_model_source,
+                                 bg=BTN, fg=MUTED, relief="flat",
+                                 font=("Segoe UI", 10), padx=8)
+        self.src_btn.pack(side="left", padx=(0, 10))
+        # Nur Modelle verbundener Provider (wirkt auf den Katalog)
+        self.filt_btn = tk.Button(tb, text="", command=self._toggle_ready_only,
+                                  bg=BTN, fg=MUTED, relief="flat",
+                                  font=("Segoe UI", 10), padx=8)
+        self.filt_btn.pack(side="left", padx=(0, 10))
+        self._refresh_source_ui()
 
         # Modus-Umschalter
         self.mode_btn = tk.Button(tb, text="Modus: einfach", command=self._toggle_mode,
@@ -458,6 +475,17 @@ class App:
             text = ""
         if not text:
             return
+
+        # Warnen, wenn das Modell am Gateway nicht verbunden ist (nicht in /v1/models).
+        model = self.model_var.get() or self.cfg.get("default_model", config.DEFAULT_MODEL)
+        if self.usable_models and model not in self.usable_models:
+            if not messagebox.askyesno(
+                    "Modell nicht verbunden",
+                    f"Das Modell »{model}« ist am Gateway nicht verbunden "
+                    f"(nicht in /v1/models).\n\nTrotzdem senden?"):
+                self.status_var.set(f"Senden abgebrochen: {model} ist nicht verbunden.")
+                return
+
         self.prompt.delete("1.0", "end")
         self.active.add(models.ChatMessage(role="user", content=text, kind="message"))
         self.store.upsert_conversation(self.active)
@@ -466,7 +494,6 @@ class App:
 
         self._streaming = True
         self.send_btn.configure(state="disabled", text="…")
-        model = self.model_var.get() or self.cfg.get("default_model", config.DEFAULT_MODEL)
         self.active.model = model
         token = self.cfg.get("token", "")
         self.service.run_turn(self.active, text, model, token, self._push)
@@ -541,6 +568,8 @@ class App:
             self._update_gw(ev[1])
         elif kind == "models":
             self._update_models(ev[1])
+        elif kind == "catalog":
+            self._update_catalog(ev[1])
 
     # ==================================================================
     # Gateway-Monitor (Hintergrund)
@@ -558,6 +587,12 @@ class App:
                 models_list = self.service.list_models()
                 if models_list:
                     self.q.put(("models", models_list))
+                # Dashboard-Quellen seltener abfragen (alle ~30s bzw. bei Wechsel)
+                src = self._model_source()
+                if src != "gateway" and (self._cat_tick % 6 == 0 or self._cat_src != src):
+                    self.q.put(("catalog", self._load_catalog_entries()))
+                    self._cat_src = src
+                self._cat_tick += 1
             except Exception:
                 pass
             time.sleep(5)
@@ -586,22 +621,115 @@ class App:
             f"fehler:      {health.get('error', '-')}\n")
         self.gw_detail.configure(state="disabled")
 
+    # ---- Modell-Quellen (gateway | catalog | all) --------------------
+    SOURCE_LABELS = {"gateway": "nutzbar", "catalog": "alle (frei)", "all": "alle (komplett)"}
+
+    def _model_source(self) -> str:
+        src = self.cfg.get("model_source", "gateway")
+        return src if src in self.SOURCE_LABELS else "gateway"
+
+    def _refresh_source_ui(self) -> None:
+        src = self._model_source()
+        self.src_btn.configure(text=f"Modelle: {self.SOURCE_LABELS[src]}")
+        state = "an" if self._ready_only() else "aus"
+        self.filt_btn.configure(text=f"nur verbundene: {state}")
+        # Der Filter wirkt nur auf den Katalog - dort gibt es das Feld 'ready'.
+        self.filt_btn.configure(state=("disabled" if src == "all" else "normal"))
+
+    def _ready_only(self) -> bool:
+        return bool(self.cfg.get("model_ready_only", True))
+
+    def _toggle_ready_only(self) -> None:
+        self.cfg["model_ready_only"] = not self._ready_only()
+        try:
+            config.save_config(self.cfg)
+        except Exception:
+            pass
+        self._refresh_source_ui()
+        self._apply_entries(self._entries_raw, self.SOURCE_LABELS[self._model_source()])
+
+    def _cycle_model_source(self) -> None:
+        order = ["gateway", "catalog", "all"]
+        nxt = order[(order.index(self._model_source()) + 1) % len(order)]
+        self.cfg["model_source"] = nxt
+        try:
+            config.save_config(self.cfg)
+        except Exception:
+            pass
+        self._refresh_source_ui()
+        self.status_var.set(f"Modell-Quelle: {self.SOURCE_LABELS[nxt]} - lade Liste ...")
+        if nxt == "gateway":
+            self._update_models(self.service.list_models())
+        else:
+            threading.Thread(target=self._fetch_catalog_once, daemon=True).start()
+
+    def _load_catalog_entries(self) -> list[dict]:
+        return (self.service.catalog_models() if self._model_source() == "catalog"
+                else self.service.all_models())
+
+    def _fetch_catalog_once(self) -> None:
+        try:
+            self.q.put(("catalog", self._load_catalog_entries()))
+        except Exception as exc:
+            self.log.warn(f"Modell-Liste: {exc}")
+
     def _update_models(self, models_list: list[str]) -> None:
-        self.models = models_list
-        self.model_listbox.delete(0, tk.END)
-        for m in models_list:
-            self.model_listbox.insert(tk.END, m)
-        # Combobox befuellen (nur wenn noch nicht gesetzt)
+        """Gateway-Liste (/v1/models): definiert, was tatsaechlich nutzbar ist."""
+        self.usable_models = set(models_list)
+        if self._model_source() != "gateway":
+            return
+        entries = [{"id": m, "name": m, "provider": m.split("/")[0] if "/" in m else "",
+                    "provider_name": "", "kind": "llm", "ready": True, "caps": {}}
+                   for m in models_list]
+        self._apply_entries(entries, "nutzbar")
+
+    def _update_catalog(self, entries: list[dict]) -> None:
+        if self._model_source() == "gateway" or not entries:
+            return
+        self._apply_entries(entries, self.SOURCE_LABELS[self._model_source()])
+
+    def _apply_entries(self, entries: list[dict], label: str) -> None:
+        self._entries_raw = entries
+        # Katalog auf verbundene Provider einschraenken ("ready").
+        if self._ready_only() and self._model_source() == "catalog":
+            entries = [e for e in entries if e.get("ready")]
+        self.model_entries = entries
+        ids = [e["id"] for e in entries]
+        self.models = ids
+
+        # Combobox: Auswahl erhalten, sonst Default/ersten Eintrag nehmen
         cur = self.model_var.get()
-        vals = list(self.model_combo["values"] or [])
-        if not vals:
-            self.model_combo["values"] = models_list
-        if not cur and models_list:
+        self.model_combo["values"] = ids
+        if not cur or cur not in ids:
             default = self.cfg.get("default_model", "")
-            pick = default if default in models_list else models_list[0]
-            self.model_var.set(pick)
-            if self.active:
-                self.active.model = pick
+            pick = default if default in ids else (ids[0] if ids else "")
+            if pick:
+                self.model_var.set(pick)
+                if self.active:
+                    self.active.model = pick
+
+        # Experten-Liste mit Details (nur sichtbar im experten-Modus)
+        self.model_listbox.delete(0, tk.END)
+        for e in entries:
+            caps = e.get("caps") or {}
+            bits = []
+            if e.get("kind") and e["kind"] != "llm":
+                bits.append(e["kind"])
+            if e.get("ready"):
+                bits.append("verbunden")
+            if caps.get("vision"):
+                bits.append("vision")
+            if caps.get("reasoning"):
+                bits.append("reasoning")
+            ctx = caps.get("contextWindow")
+            suffix = ("   " + " ".join(bits)) if bits else ""
+            suffix += f"   ctx={ctx}" if ctx else ""
+            self.model_listbox.insert(tk.END, f"{e['id']}{suffix}")
+
+        if not self._streaming:
+            total = len(self._entries_raw)
+            extra = f" (von {total})" if len(ids) != total else ""
+            self.status_var.set(f"Modelle ({label}): {len(ids)}{extra}")
 
     def _on_model_change(self, _e=None) -> None:
         if self.active:

@@ -27,6 +27,7 @@ except AttributeError:
 
 from . import config
 from .models import ChatMessage, Conversation
+from . import catalog as catalog_mod
 from . import views
 
 # Ereignis-Typen, die ueber push() ans UI gehen:
@@ -193,6 +194,48 @@ class Service:
             if self.log:
                 self.log.warn(f"Modellliste fehlgeschlagen: {exc}")
         return []
+
+    # ------------------------------------------------------------------
+    # Modell-Katalog (Dashboard-Quellen, siehe core/catalog.py)
+    # ------------------------------------------------------------------
+    def _dashboard_token(self) -> tuple[str, str | None]:
+        """(Dashboard-Wurzel, CLI-Token) fuer die /api-Routen."""
+        root = catalog_mod.dashboard_root(self.cfg.get("gateway_url", config.GATEWAY_URL))
+        return root, catalog_mod.cli_token()
+
+    def catalog_models(self) -> list[dict]:
+        """Alle Modelle des Dashboards (freie Provider, /api/models/catalog).
+
+        Liefert [] wenn Token/Endpunkt nicht verfuegbar ist.
+        """
+        root, cli = self._dashboard_token()
+        if not cli:
+            if self.log:
+                self.log.warn(
+                    f"Dashboard-Token nicht ableitbar ({catalog_mod.data_dir()}) - "
+                    "machine-id/auth/cli-secret fehlen."
+                )
+            return []
+        try:
+            data = catalog_mod.fetch_catalog(root, cli)
+            return catalog_mod.catalog_entries(data)
+        except Exception as exc:
+            if self.log:
+                self.log.warn(f"Dashboard-Katalog nicht erreichbar: {exc}")
+            return []
+
+    def all_models(self) -> list[dict]:
+        """Komplette eingebaute Tabelle + Custom-Modelle (/api/models)."""
+        root, cli = self._dashboard_token()
+        if not cli:
+            return []
+        try:
+            data = catalog_mod.fetch_all(root, cli)
+            return catalog_mod.all_entries(data)
+        except Exception as exc:
+            if self.log:
+                self.log.warn(f"Modell-Tabelle nicht erreichbar: {exc}")
+            return []
 
     # ------------------------------------------------------------------
     # Projekt

@@ -27,7 +27,7 @@ Was diese Bridge tut:
      rohem JavaScript entpackt, denn Codex erwartet für ``exec`` den reinen
      Quelltext, kein JSON.
 
-Aufruf:  python bridge.py --port 20127 --upstream http://localhost:20128/v1
+Aufruf:  python bridge.py --port 20131 --upstream http://localhost:20128/v1
 """
 from __future__ import annotations
 
@@ -342,7 +342,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
     def _proxy(self, body: bytes) -> None:
         scheme, host, port, prefix = _upstream_parts()
         # Codex setzt seine base_url auf diese Bridge inkl. Basis-Pfad
-        # (z.B. http://127.0.0.1:20127/v1). Damit enthaelt self.path den
+        # (z.B. http://127.0.0.1:20131/v1). Damit enthaelt self.path den
         # /v1-Anteil bereits - wir leiten also 1:1 weiter und haengen NICHT
         # noch einmal das upstream-Prefix davor (sonst /v1/v1/...).
         # Absolute-Form (Proxy-Stil "POST http://host/path") muss auf den
@@ -577,7 +577,7 @@ def main(argv=None) -> int:
     global UPSTREAM, LOG_PATH, VERBOSE, DUMP_DIR
     parser = argparse.ArgumentParser(description="Codex <-> Gateway Tool-Bridge")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=20127)
+    parser.add_argument("--port", type=int, default=20131)
     parser.add_argument("--upstream", default="http://localhost:20128/v1")
     parser.add_argument("--log")
     parser.add_argument("--dump", help="Verzeichnis fuer Request/Response-Mitschnitte")

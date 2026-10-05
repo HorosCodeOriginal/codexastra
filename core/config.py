@@ -25,7 +25,9 @@ BRIDGE_PY = BASE_DIR / "bridge.py"
 
 # -- Bridge / Gateway -------------------------------------------------------
 BRIDGE_HOST = "127.0.0.1"
-BRIDGE_PORT = 20127
+# Port 20127 ist der Default von FlagshipRouter (package.json) - dort kollidiert
+# die Bridge mit einem per `npm start` gestarteten Router. Deshalb 20131.
+BRIDGE_PORT = 20131
 BRIDGE_URL = f"http://{BRIDGE_HOST}:{BRIDGE_PORT}/v1"
 BRIDGE_HEALTH = f"http://{BRIDGE_HOST}:{BRIDGE_PORT}/__bridge/health"
 # Upstream des Gateways: der lokale Dashboard-Service des Nutzers.
@@ -93,6 +95,13 @@ DEFAULTS = {
     "auto_start_bridge": True,
     "bridge_host": BRIDGE_HOST,
     "bridge_port": BRIDGE_PORT,
+    # Welche Modelle die Auswahl zeigt:
+    #   "gateway" -> nur /v1/models (nutzbar, credential-gefiltert)
+    #   "catalog" -> /api/models/catalog (Dashboard-Katalog der freien Provider)
+    #   "all"     -> /api/models (komplette eingebaute Tabelle + Custom-Modelle)
+    "model_source": "gateway",
+    # Im Katalog nur Modelle verbundener Provider zeigen ("ready").
+    "model_ready_only": True,
     "max_project_files": 4000,
     "ignore_dirs": [
         ".git", "node_modules", "__pycache__", ".venv", "dist",

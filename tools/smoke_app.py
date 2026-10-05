@@ -35,6 +35,12 @@ def pump(root: tk.Tk, seconds: float) -> None:
 
 
 def main() -> int:
+    # Symbole (✓/✗) auch bei umgeleiteter Ausgabe (Pipe/Datei) ausgeben koennen.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
     # --- temporaere Datenumgebung (kein Ueberschreiben der Nutzerdaten) ---
     tmp = Path(tempfile.mkdtemp(prefix="codexastra_smoke_"))
     cc.CONVERSATIONS_PATH = tmp / "conversations.json"
@@ -50,6 +56,18 @@ def main() -> int:
     }
     cservice.Service.list_models = lambda self: [cc.DEFAULT_MODEL, "gpt-4o", "o3"]
     cservice.Service.available = lambda self: True
+    # Dashboard-Katalog-Quellen (kein echtes HTTP im Test)
+    cservice.Service.catalog_models = lambda self: [
+        {"id": "af/gpt-oss-120b", "name": "gpt-oss-120b", "provider": "api-airforce",
+         "provider_name": "API.airforce", "kind": "llm", "ready": True,
+         "caps": {"contextWindow": 128000, "reasoning": True}},
+        {"id": "img/foo", "name": "foo", "provider": "x", "provider_name": "X",
+         "kind": "image", "ready": False, "caps": {}},
+    ]
+    cservice.Service.all_models = lambda self: [
+        {"id": "cx/gpt-6-astra", "name": "gpt-6-astra", "provider": "cx",
+         "provider_name": "", "kind": "llm", "ready": False, "caps": {}},
+    ]
 
     # --- Dialoge stubben ---
     import tkinter.filedialog as fd
@@ -108,6 +126,35 @@ def main() -> int:
 
         print("[Modell]")
         check(app.model_combo["values"], "Modell-Combobox befuellt")
+
+        print("[Modell-Quellen]")
+        cc.save_config = lambda *a, **k: None  # echte config.json nicht anfassen
+        check(app._model_source() == "gateway", "Start-Quelle ist gateway")
+        check(app._ready_only() is True, "Filter 'nur verbundene' ist an")
+        app._cycle_model_source()  # -> catalog
+        pump(root, 0.8)
+        check(app._model_source() == "catalog", "Zyklus: gateway -> catalog")
+        vals = list(app.model_combo["values"])
+        check(vals == ["af/gpt-oss-120b"], "Katalog: nur verbundene Modelle")
+        check("img/foo" not in vals, "Nicht verbundenes Modell gefiltert")
+        app._toggle_ready_only()  # Filter aus
+        pump(root, 0.3)
+        check("img/foo" in list(app.model_combo["values"]),
+              "Filter aus: alle Katalog-Modelle sichtbar")
+        app._toggle_ready_only()  # Filter wieder an
+        pump(root, 0.3)
+        check("img/foo" not in list(app.model_combo["values"]), "Filter wieder an")
+        app._cycle_model_source()  # -> all
+        pump(root, 0.8)
+        check(app._model_source() == "all", "Zyklus: catalog -> all")
+        check("cx/gpt-6-astra" in list(app.model_combo["values"]),
+              "Komplette Tabelle uebernommen")
+        app._cycle_model_source()  # -> gateway
+        pump(root, 0.8)
+        check(app._model_source() == "gateway", "Zyklus: all -> gateway")
+        check(list(app.model_combo["values"]) == [cc.DEFAULT_MODEL, "gpt-4o", "o3"],
+              "Gateway-Liste wieder aktiv")
+        check("gpt-4o" in app.usable_models, "Gateway-Modelle als nutzbar gemerkt")
 
         print("[Export]")
         app._export()

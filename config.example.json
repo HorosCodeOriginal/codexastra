@@ -13,7 +13,9 @@
   "skip_git_repo_check": true,
   "auto_start_bridge": true,
   "bridge_host": "127.0.0.1",
-  "bridge_port": 20127,
+  "bridge_port": 20131,
+  "model_source": "gateway",
+  "model_ready_only": true,
   "max_project_files": 4000,
   "ignore_dirs": [
     ".git",
